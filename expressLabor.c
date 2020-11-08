@@ -8,9 +8,8 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-// const char *dayNames[] = {"hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"};
-const char *testTypes[] = { "Megfazas", "COVID-19", "Tudogyulladas", "Kiutes" }; 
-#define SAVE_FILE_NAME "vinery.txt"
+char *testTypes[] = { "Megfazas", "COVID-19", "Tudogyulladas", "Kiutes" }; 
+#define SAVE_FILE_NAME "expressLabor.txt"
 
 int FindTest(const char *testType)
 {
@@ -33,7 +32,6 @@ char* TrimWS(char* s) {
             break;
         *last = 0;
     }
-    // printf("Név: %s\n",s);
     return s;
 }
 
@@ -56,13 +54,8 @@ typedef struct Record_
     int express; // 1 true | 0 false
 } Record;
 
-// typedef struct DayData_
-// {
-//     int numReq;
-//     int numVol;
-// } DayData;
+int* testNumbers[ 4 ] = { 0 };
 
-// DayData dd[7] = {{0, 0}};
 Record *records = NULL;
 int numRecords = 0;
 int allocatedRecords = 0;
@@ -72,37 +65,24 @@ void ModifyData(int mask, int inc)
     int idx = 0;
     while (mask)
     {
-        // if (mask & 1)
-        // {
-        //     dd[idx].numVol += inc; // nem lesz negativ <= ORSI (inv.)
-        // }
+        if (mask & 1)
+        {
+            testNumbers[ idx ] += inc ; // nem lesz negativ <= ORSI (inv.)
+        }
         mask >>= 1; // mask = mask >> 1;
         ++idx;
     }
 }
-void AddDayData(int mask)
+
+void AddOrderData(int mask)
 {
     ModifyData(mask, 1);
 }
 
-void RemoveDayData(int mask)
+void RemoveTestData(int mask)
 {
     ModifyData(mask, -1);
 }
-
-// bool CheckDayCapacity(int mask, int inc ) {
-//     int idx = 0;
-//     int capMask = 0;
-//     while (mask)
-//     {
-//         if ((mask & 1) && (dd[idx].numVol + inc < dd[idx].numReq))
-//         {
-//             capMask |= 1U<<idx; // |= - bitwise or ; 1U - unsigned int
-//         }
-//         mask >>= 1; // mask = mask >> 1;
-//         ++idx;
-//     }
-// }
 
 Record *NewRecord()
 {
@@ -137,10 +117,6 @@ void SaveAllRecords()
         perror("Nem lehet menteni a " SAVE_FILE_NAME " fileba..\n");
         return;
     }
-    // for (int i = 0; i < 7; ++i)
-    // {
-    //     fprintf(f, "%d ", dd[i].numReq);
-    // }
     for (int i = 0; i < numRecords; ++i)
     {
         WriteSingleRecord(f, &records[i]);
@@ -161,33 +137,12 @@ void AppendRecordToFile(const Record *rec)
     fclose(f);
 }
 
-// void QueryAndSaveReqWorkers()
-// {
-//     printf("Még nincsenek meg a borászat igényei!\n");
-//     for (int i = 0; i < 7; i++)
-//     {
-//         printf("Adja meg, hogy a %s napra mennyi munkás szükséges: ", testTypes[i]);
-//         scanf("%d", &dd[i].numReq);
-//     }
-//     SaveAllRecords();
-// }
-
 bool InitRecords()
 {
-    // memset(dd, 0, sizeof(dd));
-
     FILE *f = fopen(SAVE_FILE_NAME, "r");
     if (!f)
         return false;
 
-    // for (int i = 0; i < 7; ++i)
-    // {
-    //     if (fscanf(f, "%d", &dd[i].numReq) < 0)
-    //     {
-    //         fclose(f);
-    //         return false;
-    //     }
-    // }
     char line[200];
     while(true) {
         char* r= fgets(line, sizeof(line), f);
@@ -198,8 +153,7 @@ bool InitRecords()
         nr->name = strdup(TrimWS(line));
         nr->addr = strdup(ReadTrimmed(f, line, sizeof(line)));
         fscanf(f, "%d", &nr->testMask);
-        // printf("addday\n");
-        AddDayData(nr->testMask);    
+        AddOrderData(nr->testMask);    
     }
     fclose(f);
     return true;
@@ -221,7 +175,7 @@ void CleanupRecords()
 
 void EraseRecordAndSave(Record *rec)
 {
-    RemoveDayData(rec->testMask);
+    RemoveTestData(rec->testMask);
     FreeRecordData(rec);
     Record *last = records + numRecords;
     if (rec + 1 != last)
@@ -229,6 +183,7 @@ void EraseRecordAndSave(Record *rec)
     --numRecords;
     SaveAllRecords();
 }
+
 void EraseRecordByIdxAndSave(int idx)
 {
     if (idx < 0 || idx >= numRecords)
@@ -236,18 +191,17 @@ void EraseRecordByIdxAndSave(int idx)
     EraseRecordAndSave(records + idx);
 }
 
-int ReadDays(char* msg, bool skipCapacityCheck)
+int ReadTests(char* msg)
 {
-    char days[55];
+    char tests[55];
     while(true) {
-        char* trimmed = ReadTrimmedInput(msg, days, sizeof(days));
+        char* trimmed = ReadTrimmedInput(msg, tests, sizeof(tests));
         if (!trimmed || !trimmed[0])
             break;
-
         char *strtokstate = NULL;
         bool badInput = false;
         int dayMask = 0;
-        for (char *s = strtok_r(days, " \t\n\r", &strtokstate); s; s = strtok_r(NULL, " \t\n\r", &strtokstate))
+        for (char *s = strtok_r(tests, " \t\n\r", &strtokstate); s; s = strtok_r(NULL, " \t\n\r", &strtokstate)) // C provides strtok() and strtok_r() for splitting a string by some delimiter. |\n - new line, \t - tab, \r - return
         {
             int d = FindTest(s);
             if (d >= 0)
@@ -257,32 +211,25 @@ int ReadDays(char* msg, bool skipCapacityCheck)
         }
         if (badInput)
             continue;
-        if (
-        skipCapacityCheck)
-            return dayMask;
-        // int okMask = CheckDayCapacity(dayMask, 1);
-        // if (okMask == dayMask)
-        //     return dayMask;
-        // printf("Minden hely foglalt az adott napon (%d)\n", dayMask & ~okMask); // should not be only a number
+        return dayMask;
     }
-    return -1;
 }
 
 void ListATest(int testIdx) 
 {
     int mask = 1 << testIdx;
-    printf("%s /*(%d/%d):*/\n", testTypes[ testIdx ]/*, dd[ testIdx ].numVol, dd[ testIdx ].numReq*/ );
+    printf("%s: %d\n", testTypes[ testIdx ], testNumbers[ testIdx ] );
     for(int i = 0; i<numRecords; ++i)
     {
         const Record* r = records + i;
         if (r->testMask & mask)
-            printf("\t%s(%s)\n", r->name, r->addr);
+            printf( "\t%s %s %s %d\n", r->name, r->addr, r->taj, r->express );
     }
 }
 
 void ListAllTests()
 {
-    for(int d = 0; d<7; ++d)
+    for(int d = 0; d < sizeof( numRecords ); ++d)
     {
         ListATest(d);
         printf("\n");
@@ -293,7 +240,7 @@ void ListAllTests()
 void QueryAndListATest()
 {
     char testName[55];
-    char* trimmed = ReadTrimmedInput("Adja meg a kivant tesztet", testName, sizeof(testName));
+    char* trimmed = ReadTrimmedInput( "Adja meg, a kivant tipusu teszt / tesztek nevet\nA lehetseges tesztek:\n\tMegfazas,\n\tCOVID-19,\n\tTudogyulladas,\n\tKiutes", testName, sizeof(testName));
     if (!trimmed || !trimmed[0])
         return;
     int d = FindTest(trimmed);
@@ -318,9 +265,6 @@ Record* QueryAndFindRecord()
 
 int main(int argc, char **argv)
 {
-    // if (!InitRecords())
-    //     QueryAndSaveReqWorkers();
-    // input: what do you want to do
     int isRunning = 1; // 1 true | 0 false
     while (isRunning == 1)
     {
@@ -344,22 +288,22 @@ int main(int argc, char **argv)
             char name[50];
             char address[100];
             char TAJ[12];
-            char express[5]; 
+            char express[80]; 
 
             ReadTrimmedInput("Adja meg a nevet", name, sizeof(name));
             ReadTrimmedInput("Adja meg a cimet", address, sizeof(address));
             ReadTrimmedInput("Adja meg a TAJ szamat", TAJ, sizeof(TAJ));
-            int testMask = ReadDays("Adja meg, hogy milyen tipusu tesztet / teszteket ker (szóközökkel elválasztva)", false);
+            ReadTrimmedInput( "Kivanja igenybe venni a hatosagi arnal dragabb, de gyorsabb EXPRESS szolgaltatast? [ igen/nem ]", express, sizeof( express ) );
+            int exp;
+            if ( strcmp(express, "igen") ==0 ) exp = 1;
+            else exp = 0;
+            int testMask = ReadTests( "Adja meg, hogy milyen tipusu tesztet / teszteket ker (szóközökkel elválasztva).\nA lehetseges tesztek:\n\tMegfazas,\n\tCOVID-19,\n\tTudogyulladas,\n\tKiutes" );
             if (testMask < 0) {
                 printf("nincsen teszttipus megadva\n"); // no record
                 continue;
             }
-            ReadTrimmedInput( "Kivanja igenybe venni a hatosagi arnal dragabb, de gyorsabb EXPRESS szolgaltatast? [ igen/nem ]", express, sizeof( express ) );
-            int exp;
-            if ( express == "igen" ) exp = 1;
-            else exp = 0;
             Record *orderData = AddNewRecord( name, address, TAJ, testMask, exp );
-            AddDayData( testMask );
+            AddOrderData( testMask );
             AppendRecordToFile( orderData );
             break; }
         // Modify one order
@@ -367,21 +311,16 @@ int main(int argc, char **argv)
             Record* rec = QueryAndFindRecord();
             if (!rec) break; // QueryAndFindRecord prints if the name was not found
             while(true) {
-                int testMask = ReadDays("Adja meg, hogy milyen tipusu teszteket ker (szokozokkel elvalasztva)", true);
+                int testMask = ReadTests( "Adja meg, hogy milyen tipusu tesztet / teszteket ker (szóközökkel elválasztva).\nA lehetseges tesztek:\n\tMegfazas,\n\tCOVID-19,\n\tTudogyulladas,\n\tKiutes" );
                 if (testMask >= 0 && testMask != rec->testMask)
                 {
                     int nd = testMask & ~rec->testMask;
-                    // if (CheckDayCapacity(nd,1) != nd)
-                    // {
-                    //     printf("Egyik nap mar tele van, uj adatokat kerunk\n");
-                    //     continue;
-                    // }
-                    RemoveDayData(rec->testMask);
+                    RemoveTestData(rec->testMask);
                     rec->testMask = testMask;
-                    AddDayData(rec->testMask);
+                    AddOrderData(rec->testMask);
                 }
                 else if (testMask < 0)
-                    printf("nincsenek tesztek megadva\n"); // no record
+                    printf("Nincsenek tesztek megadva\n"); // no record
                 else
                     printf("Nem modosult adat");
                 break;             
@@ -402,15 +341,8 @@ int main(int argc, char **argv)
         case 5: 
             ListAllTests();
             break;
-        // // Napi telitettség - regi
-        // case 6:
-        //     for(int i=0; i < 7; ++i) {
-        //         printf("%d/%d ", dd[i].numVol, dd[i].numReq);
-        //     }
-        //     printf("\n");
-        //     break;
         // Close everything
-        case 7:
+        case 6:
             isRunning = 0;
             break;
         // Input is not a valid choice
